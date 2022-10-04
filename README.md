@@ -1,2 +1,2 @@
 # translator
-Translator application
+Translator application to translate text from speech
