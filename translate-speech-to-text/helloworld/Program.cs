@@ -6,7 +6,6 @@
 // <code>
 using System;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Translation;
 
