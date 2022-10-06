@@ -28,16 +28,15 @@ namespace helloworld
             // Sets voice name of synthesis output.
             const string GermanVoice = "de-DE-Hedda";
             config.VoiceName = GermanVoice;
-            
-            // Should be en-US-..., since this is the target language
-            // config.SpeechSynthesisVoiceName = "de-DE-ChristophNeural";
+
+            config.SpeechSynthesisVoiceName = "en-US-JacobNeural";
 
             // Creates a translation recognizer using microphone as audio input.
             using (var recognizer = new TranslationRecognizer(config))
             {
                 // Subscribes to events.
 
-                // Skip handling the recognizing events
+                // Skip handling the recognizing event
                 /* recognizer.Recognizing += (s, e) =>
                 {
                     Console.WriteLine($"RECOGNIZING in '{fromLanguage}': Text={e.Result.Text}");
