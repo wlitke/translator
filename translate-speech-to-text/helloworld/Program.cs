@@ -5,6 +5,7 @@
 
 // <code>
 using System;
+using System.Configuration;
 using System.Threading.Tasks;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Translation;
@@ -13,11 +14,13 @@ namespace helloworld
 {
     class Program
     {
+        static string subscriptionKey = null;
+
         public static async Task TranslationContinuousRecognitionAsync()
         {
             // Creates an instance of a speech translation config with specified subscription key and service region.
             // Replace with your own subscription key and service region (e.g., "westus").
-            var config = SpeechTranslationConfig.FromSubscription("", "westeurope");
+            var config = SpeechTranslationConfig.FromSubscription(subscriptionKey, "westeurope");
 
             // Sets source and target languages.
             string fromLanguage = "de-DE";
@@ -107,8 +110,22 @@ namespace helloworld
             }
         }
 
+        static void ReadSetting(string key)
+        {
+            try
+            {
+                var appSettings = ConfigurationManager.AppSettings;
+                subscriptionKey = appSettings[key] ?? "Not Found";
+            }
+            catch (ConfigurationErrorsException)
+            {
+                Console.WriteLine("Error reading app settings");
+            }
+        }
+
         static async Task Main(string[] args)
         {
+            ReadSetting("SubscriptionKey");
             await TranslationContinuousRecognitionAsync();
         }
     }
