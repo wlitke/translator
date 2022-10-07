@@ -14,7 +14,7 @@ namespace helloworld
 {
     class Program
     {
-        static string subscriptionKey = null;
+        static string subscriptionKey;
 
         public static async Task TranslationContinuousRecognitionAsync()
         {
@@ -110,22 +110,22 @@ namespace helloworld
             }
         }
 
-        static void ReadSetting(string key)
+        static string ReadSetting(string key)
         {
             try
             {
                 var appSettings = ConfigurationManager.AppSettings;
-                subscriptionKey = appSettings[key] ?? "Not Found";
+                return appSettings[key] ?? "Not Found";
             }
             catch (ConfigurationErrorsException)
             {
-                Console.WriteLine("Error reading app settings");
+                return "Error reading app settings";
             }
         }
 
         static async Task Main(string[] args)
         {
-            ReadSetting("SubscriptionKey");
+            subscriptionKey = ReadSetting("SubscriptionKey");
             await TranslationContinuousRecognitionAsync();
         }
     }
