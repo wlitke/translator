@@ -14,24 +14,24 @@ namespace helloworld
 {
     class Program
     {
-        static string subscriptionKey;
-
         public static async Task TranslationContinuousRecognitionAsync()
         {
+            string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice;
+            ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice);
+
             // Creates an instance of a speech translation config with specified subscription key and service region.
             // Replace with your own subscription key and service region (e.g., "westus").
-            var config = SpeechTranslationConfig.FromSubscription(subscriptionKey, "westeurope");
-
-            // Sets source and target languages.
-            string fromLanguage = "de-DE";
+            var config = SpeechTranslationConfig.FromSubscription(subscriptionKey, region);
             config.SpeechRecognitionLanguage = fromLanguage;
-            config.AddTargetLanguage("en");
+            config.AddTargetLanguage(targetLanguage);
+            config.SpeechSynthesisVoiceName = targetVoice;
 
-            // Sets voice name of synthesis output.
-            const string GermanVoice = "de-DE-Hedda";
-            config.VoiceName = GermanVoice;
-
-            config.SpeechSynthesisVoiceName = "en-US-JacobNeural";
+            // Support characters for uk-UA
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                Console.InputEncoding = System.Text.Encoding.Unicode;
+                Console.OutputEncoding = System.Text.Encoding.Unicode;
+            }
 
             // Creates a translation recognizer using microphone as audio input.
             using (var recognizer = new TranslationRecognizer(config))
@@ -59,7 +59,7 @@ namespace helloworld
 
                             using (var synthesizer = new SpeechSynthesizer(config))
                             {
-                                string text = element.Value;                               
+                                string text = element.Value;
                                 using (var result = await synthesizer.SpeakTextAsync(text))
                                 {
                                     if (result.Reason == ResultReason.SynthesizingAudioCompleted)
@@ -110,6 +110,15 @@ namespace helloworld
             }
         }
 
+        private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice)
+        {
+            subscriptionKey = ReadSetting("SubscriptionKey");
+            region = ReadSetting("Region");
+            fromLanguage = ReadSetting("FromLanguage");
+            targetLanguage = ReadSetting("TargetLanguage");
+            targetVoice = ReadSetting("TargetVoice");
+        }
+
         static string ReadSetting(string key)
         {
             try
@@ -125,7 +134,6 @@ namespace helloworld
 
         static async Task Main(string[] args)
         {
-            subscriptionKey = ReadSetting("SubscriptionKey");
             await TranslationContinuousRecognitionAsync();
         }
     }
