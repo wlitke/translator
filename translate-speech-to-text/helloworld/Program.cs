@@ -5,6 +5,7 @@
 
 // <code>
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Threading.Tasks;
 using Microsoft.CognitiveServices.Speech;
@@ -36,78 +37,86 @@ namespace helloworld
             // Creates a translation recognizer using microphone as audio input.
             using (var recognizer = new TranslationRecognizer(config))
             {
-                // Subscribes to events.
+                Queue<string> textQueue = new Queue<string>();
+                SubscribeToEvents(fromLanguage, recognizer, textQueue);
 
-                // Skip handling the recognizing event
-                /* recognizer.Recognizing += (s, e) =>
-                {
-                    Console.WriteLine($"RECOGNIZING in '{fromLanguage}': Text={e.Result.Text}");
-                    foreach (var element in e.Result.Translations)
-                    {
-                        Console.WriteLine($"    TRANSLATING into '{element.Key}': {element.Value}");
-                    }
-                };*/
+                // Starts continuous recognition. Uses StopContinuousRecognitionAsync() to stop recognition.
+                Console.WriteLine("Say something ...");
+                await recognizer.StartContinuousRecognitionAsync();
 
-                recognizer.Recognized += async (s, e) =>
+                while (true)
                 {
-                    if (e.Result.Reason == ResultReason.TranslatedSpeech)
+                    if (textQueue.Count > 0)
                     {
-                        Console.WriteLine($"\nFinal result: Reason: {e.Result.Reason.ToString()}, recognized text in {fromLanguage}: {e.Result.Text}");
-                        foreach (var element in e.Result.Translations)
+                        string text = textQueue.Dequeue();
+                        using (var synthesizer = new SpeechSynthesizer(config))
                         {
-                            Console.WriteLine($"    TRANSLATED into '{element.Key}': {element.Value}");
-
-                            using (var synthesizer = new SpeechSynthesizer(config))
+                            using (var result = await synthesizer.SpeakTextAsync(text))
                             {
-                                string text = element.Value;
-                                using (var result = await synthesizer.SpeakTextAsync(text))
+                                if (result.Reason == ResultReason.SynthesizingAudioCompleted)
                                 {
-                                    if (result.Reason == ResultReason.SynthesizingAudioCompleted)
-                                    {
-                                        Console.WriteLine($"Speech synthesized to speaker for text [{text}]");
-                                    }
+                                    Console.WriteLine($"Speech synthesized to speaker for text [{text}]");
                                 }
                             }
                         }
                     }
-                };
-
-                // Skip handling the synthesizing event
-                /* recognizer.Synthesizing += (s, e) =>
-                {
-                    var audio = e.Result.GetAudio();
-                    Console.WriteLine(audio.Length != 0
-                        ? $"AudioSize: {audio.Length}"
-                        : $"AudioSize: {audio.Length} (end of synthesis data)");
-                };*/
-
-                recognizer.Canceled += (s, e) =>
-                {
-                    Console.WriteLine($"\nRecognition canceled. Reason: {e.Reason}; ErrorDetails: {e.ErrorDetails}");
-                };
-
-                recognizer.SessionStarted += (s, e) =>
-                {
-                    Console.WriteLine("\nSession started event.");
-                };
-
-                recognizer.SessionStopped += (s, e) =>
-                {
-                    Console.WriteLine("\nSession stopped event.");
-                };
-
-                // Starts continuous recognition. Uses StopContinuousRecognitionAsync() to stop recognition.
-                Console.WriteLine("Say something...");
-                await recognizer.StartContinuousRecognitionAsync();
-
-                do
-                {
-                    Console.WriteLine("Press Enter to stop");
-                } while (Console.ReadKey().Key != ConsoleKey.Enter);
-
+                }
+                // Never reached
+                /*
                 // Stops continuous recognition.
                 await recognizer.StopContinuousRecognitionAsync();
+                */
             }
+        }
+
+        private static void SubscribeToEvents(string fromLanguage, TranslationRecognizer recognizer, Queue<string> textQueue)
+        {
+            // Skip handling the recognizing event
+            /* recognizer.Recognizing += (s, e) =>
+            {
+                Console.WriteLine($"RECOGNIZING in '{fromLanguage}': Text={e.Result.Text}");
+                foreach (var element in e.Result.Translations)
+                {
+                    Console.WriteLine($"    TRANSLATING into '{element.Key}': {element.Value}");
+                }
+            };*/
+
+            recognizer.Recognized += async (s, e) =>
+            {
+                if (e.Result.Reason == ResultReason.TranslatedSpeech)
+                {
+                    Console.WriteLine($"\nFinal result: Reason: {e.Result.Reason.ToString()}, recognized text in {fromLanguage}: {e.Result.Text}");
+                    foreach (var element in e.Result.Translations)
+                    {
+                        Console.WriteLine($"    TRANSLATED into '{element.Key}': {element.Value}");
+                        textQueue.Enqueue(element.Value);
+                    }
+                }
+            };
+
+            // Skip handling the synthesizing event
+            /* recognizer.Synthesizing += (s, e) =>
+            {
+                var audio = e.Result.GetAudio();
+                Console.WriteLine(audio.Length != 0
+                    ? $"AudioSize: {audio.Length}"
+                    : $"AudioSize: {audio.Length} (end of synthesis data)");
+            };*/
+
+            recognizer.Canceled += (s, e) =>
+            {
+                Console.WriteLine($"\nRecognition canceled. Reason: {e.Reason}; ErrorDetails: {e.ErrorDetails}");
+            };
+
+            recognizer.SessionStarted += (s, e) =>
+            {
+                Console.WriteLine("\nSession started event.");
+            };
+
+            recognizer.SessionStopped += (s, e) =>
+            {
+                Console.WriteLine("\nSession stopped event.");
+            };
         }
 
         private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice)
