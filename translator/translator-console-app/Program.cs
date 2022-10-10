@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Translation;
 
-namespace helloworld
+namespace translator
 {
     class Program
     {
