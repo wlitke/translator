@@ -20,25 +20,13 @@ namespace translator
             string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice;
             ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice);
 
-            // Creates an instance of a speech translation config with specified subscription key and service region.
-            // Replace with your own subscription key and service region (e.g., "westus").
-            var config = SpeechTranslationConfig.FromSubscription(subscriptionKey, region);
-            config.SpeechRecognitionLanguage = fromLanguage;
-            config.AddTargetLanguage(targetLanguage);
-            config.SpeechSynthesisVoiceName = targetVoice;
-
-            // Support characters for uk-UA
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-            {
-                Console.InputEncoding = System.Text.Encoding.Unicode;
-                Console.OutputEncoding = System.Text.Encoding.Unicode;
-            }
+            SpeechTranslationConfig config = SetTranslationConfig(subscriptionKey, region, fromLanguage, targetLanguage, targetVoice);
 
             // Creates a translation recognizer using microphone as audio input.
             using (var recognizer = new TranslationRecognizer(config))
             {
-                Queue<string> textQueue = new Queue<string>();
-                SubscribeToEvents(fromLanguage, recognizer, textQueue);
+                Queue<string> textQueue = new();
+                SubscribeToEvents(recognizer, fromLanguage, textQueue);
 
                 // Starts continuous recognition. Uses StopContinuousRecognitionAsync() to stop recognition.
                 Console.WriteLine("Say something ...");
@@ -46,30 +34,52 @@ namespace translator
 
                 while (true)
                 {
-                    if (textQueue.Count > 0)
-                    {
-                        string text = textQueue.Dequeue();
-                        using (var synthesizer = new SpeechSynthesizer(config))
-                        {
-                            using (var result = await synthesizer.SpeakTextAsync(text))
-                            {
-                                if (result.Reason == ResultReason.SynthesizingAudioCompleted)
-                                {
-                                    Console.WriteLine($"Speech synthesized to speaker for text [{text}]");
-                                }
-                            }
-                        }
-                    }
+                    await SynthesizeText(config, textQueue);
                 }
                 // Never reached
-                /*
                 // Stops continuous recognition.
-                await recognizer.StopContinuousRecognitionAsync();
-                */
+                /* await recognizer.StopContinuousRecognitionAsync();*/
             }
         }
 
-        private static void SubscribeToEvents(string fromLanguage, TranslationRecognizer recognizer, Queue<string> textQueue)
+        private static async Task SynthesizeText(SpeechTranslationConfig config, Queue<string> textQueue)
+        {
+            if (textQueue.Count > 0)
+            {
+                string text = textQueue.Dequeue();
+                using (var synthesizer = new SpeechSynthesizer(config))
+                {
+                    using (var result = await synthesizer.SpeakTextAsync(text))
+                    {
+                        if (result.Reason == ResultReason.SynthesizingAudioCompleted)
+                        {
+                            Console.WriteLine($"Speech synthesized to speaker for text [{text}]");
+                        }
+                    }
+                }
+            }
+        }
+
+        private static SpeechTranslationConfig SetTranslationConfig(string subscriptionKey, string region, string fromLanguage, string targetLanguage, string targetVoice)
+        {
+            // Creates an instance of a speech translation config with specified subscription key and service region.
+            // Replace with your own subscription key and service region (e.g., "westus").
+            var config = SpeechTranslationConfig.FromSubscription(subscriptionKey, region);
+            config.SpeechRecognitionLanguage = fromLanguage;
+            config.AddTargetLanguage(targetLanguage);
+            config.SpeechSynthesisVoiceName = targetVoice;
+
+            // Support characters for, e.g., uk-UA
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                Console.InputEncoding = System.Text.Encoding.Unicode;
+                Console.OutputEncoding = System.Text.Encoding.Unicode;
+            }
+
+            return config;
+        }
+
+        private static void SubscribeToEvents(TranslationRecognizer recognizer, string fromLanguage, Queue<string> textQueue)
         {
             // Skip handling the recognizing event
             /* recognizer.Recognizing += (s, e) =>
@@ -81,7 +91,7 @@ namespace translator
                 }
             };*/
 
-            recognizer.Recognized += async (s, e) =>
+            recognizer.Recognized += (s, e) =>
             {
                 if (e.Result.Reason == ResultReason.TranslatedSpeech)
                 {
