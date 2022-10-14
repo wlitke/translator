@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Threading.Tasks;
 using Microsoft.CognitiveServices.Speech;
+using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Translation;
 
 namespace translator
@@ -17,13 +18,15 @@ namespace translator
     {
         public static async Task TranslationContinuousRecognitionAsync()
         {
-            string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice;
-            ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice);
+            string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice, microphoneInputID, speakerOutputID;
+            ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice, out microphoneInputID, out speakerOutputID);
 
-            SpeechTranslationConfig config = SetTranslationConfig(subscriptionKey, region, fromLanguage, targetLanguage, targetVoice);
+            SpeechTranslationConfig translationCfg = SetTranslationConfig(subscriptionKey, region, fromLanguage, targetLanguage, targetVoice);
+            AudioConfig audioCfgIn = string.IsNullOrEmpty(microphoneInputID) ? AudioConfig.FromDefaultMicrophoneInput() : AudioConfig.FromMicrophoneInput(microphoneInputID);
+            AudioConfig audioCfgOut = string.IsNullOrEmpty(speakerOutputID) ? AudioConfig.FromDefaultSpeakerOutput() : AudioConfig.FromSpeakerOutput(speakerOutputID);
 
             // Creates a translation recognizer using microphone as audio input.
-            using (var recognizer = new TranslationRecognizer(config))
+            using (var recognizer = new TranslationRecognizer(translationCfg, audioCfgIn))
             {
                 Queue<string> textQueue = new();
                 SubscribeToEvents(recognizer, fromLanguage, textQueue);
@@ -34,7 +37,7 @@ namespace translator
 
                 while (true)
                 {
-                    await SynthesizeText(config, textQueue);
+                    await SynthesizeText(translationCfg, audioCfgOut, textQueue);
                 }
                 // Never reached
                 // Stops continuous recognition.
@@ -42,12 +45,12 @@ namespace translator
             }
         }
 
-        private static async Task SynthesizeText(SpeechTranslationConfig config, Queue<string> textQueue)
+        private static async Task SynthesizeText(SpeechTranslationConfig translationCfg, AudioConfig audioCfgOut, Queue<string> textQueue)
         {
             if (textQueue.Count > 0)
             {
                 string text = textQueue.Dequeue();
-                using (var synthesizer = new SpeechSynthesizer(config))
+                using (var synthesizer = new SpeechSynthesizer(translationCfg, audioCfgOut))
                 {
                     using (var result = await synthesizer.SpeakTextAsync(text))
                     {
@@ -64,10 +67,10 @@ namespace translator
         {
             // Creates an instance of a speech translation config with specified subscription key and service region.
             // Replace with your own subscription key and service region (e.g., "westus").
-            var config = SpeechTranslationConfig.FromSubscription(subscriptionKey, region);
-            config.SpeechRecognitionLanguage = fromLanguage;
-            config.AddTargetLanguage(targetLanguage);
-            config.SpeechSynthesisVoiceName = targetVoice;
+            var translationCfg = SpeechTranslationConfig.FromSubscription(subscriptionKey, region);
+            translationCfg.SpeechRecognitionLanguage = fromLanguage;
+            translationCfg.AddTargetLanguage(targetLanguage);
+            translationCfg.SpeechSynthesisVoiceName = targetVoice;
 
             // Support characters for, e.g., uk-UA
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
@@ -76,7 +79,7 @@ namespace translator
                 Console.OutputEncoding = System.Text.Encoding.Unicode;
             }
 
-            return config;
+            return translationCfg;
         }
 
         private static void SubscribeToEvents(TranslationRecognizer recognizer, string fromLanguage, Queue<string> textQueue)
@@ -129,13 +132,15 @@ namespace translator
             };
         }
 
-        private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice)
+        private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice, out string microphoneInputID, out string speakerOutputID)
         {
             subscriptionKey = ReadSetting("SubscriptionKey");
             region = ReadSetting("Region");
             fromLanguage = ReadSetting("FromLanguage");
             targetLanguage = ReadSetting("TargetLanguage");
             targetVoice = ReadSetting("TargetVoice");
+            microphoneInputID = ReadSetting("MicrophoneInputID");
+            speakerOutputID = ReadSetting("SpeakerOutputID");
         }
 
         static string ReadSetting(string key)
@@ -143,7 +148,7 @@ namespace translator
             try
             {
                 var appSettings = ConfigurationManager.AppSettings;
-                return appSettings[key] ?? "Not Found";
+                return appSettings[key] ?? null;
             }
             catch (ConfigurationErrorsException)
             {
