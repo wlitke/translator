@@ -11,19 +11,22 @@ using System.Threading.Tasks;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Translation;
+using NAudio.CoreAudioApi;
 
 namespace translator
 {
     class Program
     {
+        static AudioDevice inputDevice, outputDevice;
+
         public static async Task TranslationContinuousRecognitionAsync()
         {
-            string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice, microphoneInputID, speakerOutputID;
-            ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice, out microphoneInputID, out speakerOutputID);
+            string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice;
+            ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice);
 
             SpeechTranslationConfig translationCfg = SetTranslationConfig(subscriptionKey, region, fromLanguage, targetLanguage, targetVoice);
-            AudioConfig audioCfgIn = string.IsNullOrEmpty(microphoneInputID) ? AudioConfig.FromDefaultMicrophoneInput() : AudioConfig.FromMicrophoneInput(microphoneInputID);
-            AudioConfig audioCfgOut = string.IsNullOrEmpty(speakerOutputID) ? AudioConfig.FromDefaultSpeakerOutput() : AudioConfig.FromSpeakerOutput(speakerOutputID);
+            AudioConfig audioCfgIn = inputDevice == null ? AudioConfig.FromDefaultMicrophoneInput() : AudioConfig.FromMicrophoneInput(inputDevice.ID);
+            AudioConfig audioCfgOut = outputDevice == null ? AudioConfig.FromDefaultSpeakerOutput() : AudioConfig.FromSpeakerOutput(outputDevice.ID);
 
             // Creates a translation recognizer using microphone as audio input.
             using (var recognizer = new TranslationRecognizer(translationCfg, audioCfgIn))
@@ -132,15 +135,13 @@ namespace translator
             };
         }
 
-        private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice, out string microphoneInputID, out string speakerOutputID)
+        private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice)
         {
             subscriptionKey = ReadSetting("SubscriptionKey");
             region = ReadSetting("Region");
             fromLanguage = ReadSetting("FromLanguage");
             targetLanguage = ReadSetting("TargetLanguage");
             targetVoice = ReadSetting("TargetVoice");
-            microphoneInputID = ReadSetting("MicrophoneInputID");
-            speakerOutputID = ReadSetting("SpeakerOutputID");
         }
 
         static string ReadSetting(string key)
@@ -148,7 +149,7 @@ namespace translator
             try
             {
                 var appSettings = ConfigurationManager.AppSettings;
-                return appSettings[key] ?? null;
+                return appSettings[key] ?? "Not Found";
             }
             catch (ConfigurationErrorsException)
             {
@@ -156,8 +157,54 @@ namespace translator
             }
         }
 
+        class AudioDevice
+        {
+            public AudioDevice(string name, string id)
+            {
+                Name = name;
+                ID = id;
+            }
+            public string Name { get; set; }
+            public string ID { get; set; }
+        }
+
+        private static void PrintSoundDevices()
+        {
+            Dictionary<Int16, AudioDevice> inputDevices = new();
+            Dictionary<Int16, AudioDevice> outputDevices = new();
+
+            var enumerator = new MMDeviceEnumerator();
+
+            Console.WriteLine("Plese select a device for in- and output:\n");
+            Console.WriteLine("Device(s) for input:");
+            Int16 i = 1;
+            foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+            {
+                inputDevices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
+                Console.WriteLine("({0})\t {1}", i, endpoint.FriendlyName);
+                i++;
+            }
+
+            Console.WriteLine("\nDevice(s) for output:");
+            i = 1;
+            foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            {
+                outputDevices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
+                Console.WriteLine("({0})\t {1}", i, endpoint.FriendlyName);
+                i++;
+            }
+            Console.Write("\nDevice for input: "); Int16 inputDeviceKey = Int16.Parse(Console.ReadLine());
+            Console.Write("Device for output: "); Int16 outputDeviceKey = Int16.Parse(Console.ReadLine());
+
+            inputDevice = inputDevices[inputDeviceKey];
+            outputDevice = outputDevices[outputDeviceKey];
+
+            Console.WriteLine();
+        }
+
         static async Task Main(string[] args)
         {
+            PrintSoundDevices();
             await TranslationContinuousRecognitionAsync();
         }
     }
