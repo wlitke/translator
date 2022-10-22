@@ -126,7 +126,7 @@ namespace translator
 
             recognizer.SessionStarted += (s, e) =>
             {
-                Console.WriteLine("\nSession started event.");
+                // Console.WriteLine("\nSession started event.");
             };
 
             recognizer.SessionStopped += (s, e) =>
@@ -175,13 +175,13 @@ namespace translator
 
             var enumerator = new MMDeviceEnumerator();
 
-            Console.WriteLine("Plese select a device for in- and output:\n");
+            Console.WriteLine("Plese select a device for in- and output.\n");
             Console.WriteLine("Device(s) for input:");
             Int16 i = 1;
             foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
             {
                 inputDevices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
-                Console.WriteLine("({0})\t {1}", i, endpoint.FriendlyName);
+                Console.WriteLine("({0})\t{1}", i, endpoint.FriendlyName);
                 i++;
             }
 
@@ -190,11 +190,11 @@ namespace translator
             foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
                 outputDevices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
-                Console.WriteLine("({0})\t {1}", i, endpoint.FriendlyName);
+                Console.WriteLine("({0})\t{1}", i, endpoint.FriendlyName);
                 i++;
             }
-            Console.Write("\nDevice for input: "); Int16 inputDeviceKey = Int16.Parse(Console.ReadLine());
-            Console.Write("Device for output: "); Int16 outputDeviceKey = Int16.Parse(Console.ReadLine());
+            Console.Write("\nSelect input device by number: "); Int16 inputDeviceKey = Int16.Parse(Console.ReadLine());
+            Console.Write("Select output device by number: "); Int16 outputDeviceKey = Int16.Parse(Console.ReadLine());
 
             inputDevice = inputDevices[inputDeviceKey];
             outputDevice = outputDevices[outputDeviceKey];
