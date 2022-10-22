@@ -168,7 +168,7 @@ namespace translator
             public string ID { get; set; }
         }
 
-        private static void PrintSoundDevices()
+        private static void HandleSoundDeviceSelection()
         {
             Dictionary<Int16, AudioDevice> inputDevices = new();
             Dictionary<Int16, AudioDevice> outputDevices = new();
@@ -204,7 +204,7 @@ namespace translator
 
         static async Task Main(string[] args)
         {
-            PrintSoundDevices();
+            HandleSoundDeviceSelection();
             await TranslationContinuousRecognitionAsync();
         }
     }
