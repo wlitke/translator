@@ -12,6 +12,7 @@ using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Translation;
 using NAudio.CoreAudioApi;
+using System.Threading;
 
 namespace translator
 {
@@ -255,8 +256,17 @@ namespace translator
             }
         }
 
+        private static void timerCallback(object o)
+        {
+            Environment.Exit(0);
+        }
+
         static async Task Main(string[] args)
         {
+            int seconds = 60 * 60;
+            int systemTime = 1000 * seconds; // in milliseconds
+            Timer timer = new Timer(timerCallback, null, systemTime, systemTime);
+            
             HandleSoundDeviceSelection();
             await TranslationContinuousRecognitionAsync();
         }
