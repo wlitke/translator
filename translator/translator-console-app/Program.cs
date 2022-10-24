@@ -168,6 +168,12 @@ namespace translator
             public string ID { get; set; }
         }
 
+        enum DeviceType
+        {
+            input,
+            output
+        }
+
         private static void HandleSoundDeviceSelection()
         {
             Dictionary<Int16, AudioDevice> inputDevices = new();
@@ -176,30 +182,62 @@ namespace translator
             var enumerator = new MMDeviceEnumerator();
 
             Console.WriteLine("Plese select a device for in- and output.\n");
-            Console.WriteLine("Device(s) for input:");
-            Int16 i = 1;
-            foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
-            {
-                inputDevices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
-                Console.WriteLine("({0})\t{1}", i, endpoint.FriendlyName);
-                i++;
-            }
-
-            Console.WriteLine("\nDevice(s) for output:");
-            i = 1;
-            foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
-            {
-                outputDevices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
-                Console.WriteLine("({0})\t{1}", i, endpoint.FriendlyName);
-                i++;
-            }
-            Console.Write("\nSelect input device by number: "); Int16 inputDeviceKey = Int16.Parse(Console.ReadLine());
-            Console.Write("Select output device by number: "); Int16 outputDeviceKey = Int16.Parse(Console.ReadLine());
-
-            inputDevice = inputDevices[inputDeviceKey];
-            outputDevice = outputDevices[outputDeviceKey];
+            PrintDevices(inputDevices, enumerator, DeviceType.input);
+            PrintDevices(outputDevices, enumerator, DeviceType.output);
 
             Console.WriteLine();
+            HandleDeviceKeySelection(inputDevices, DeviceType.input);
+            HandleDeviceKeySelection(outputDevices, DeviceType.output);
+            Console.WriteLine();
+        }
+
+        private static void PrintDevices(Dictionary<Int16, AudioDevice> devices, MMDeviceEnumerator enumerator, DeviceType deviceType)
+        {
+            Console.WriteLine("Device(s) for {0}:", deviceType);
+
+            DataFlow flow = DataFlow.All;
+            if (deviceType == DeviceType.input)
+                flow = DataFlow.Capture;
+            else if (deviceType == DeviceType.output)
+                flow = DataFlow.Render;
+            else { }
+            
+            Int16 i = 1;
+            foreach (var endpoint in enumerator.EnumerateAudioEndPoints(flow, DeviceState.Active))
+            {
+                devices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
+                Console.WriteLine("({0})\t{1}", i, endpoint.FriendlyName);
+                i++;
+            }
+        }
+
+        private static void HandleDeviceKeySelection(Dictionary<Int16, AudioDevice> devices, DeviceType deviceType)
+        {
+            if (devices.Count > 0) 
+            {
+                Int16 deviceKey = 0;
+                while (deviceKey < 1 || deviceKey > devices.Count)
+                {
+                    try
+                    {
+                        Console.Write("Select {0} device by number: ", deviceType);
+                        deviceKey = Int16.Parse(Console.ReadLine());
+                        if (deviceType == DeviceType.input)
+                            inputDevice = devices[deviceKey];
+                        else if (deviceType == DeviceType.output)
+                            outputDevice = devices[deviceKey];
+                        else { }
+                    }
+                    catch (Exception)
+                    {
+                        Console.WriteLine("The entered value is invalid. Please enter an existing number.");
+                    }
+                }
+            } else
+            {
+                Console.WriteLine("There is no {0} device. Please install an {0} device.", deviceType);
+                // Environment.Exit(0);
+            }
         }
 
         static async Task Main(string[] args)
