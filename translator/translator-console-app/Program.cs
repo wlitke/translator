@@ -31,7 +31,7 @@ namespace translator
             // Creates a translation recognizer using microphone as audio input.
             using (var recognizer = new TranslationRecognizer(translationCfg, audioCfgIn))
             {
-                Queue<string> textQueue = new();
+                Queue<string> textQueue = new Queue<string>();
                 SubscribeToEvents(recognizer, fromLanguage, textQueue);
 
                 // Starts continuous recognition. Uses StopContinuousRecognitionAsync() to stop recognition.
@@ -191,8 +191,8 @@ namespace translator
 
         private static void HandleSoundDeviceSelection()
         {
-            Dictionary<Int16, AudioDevice> inputDevices = new();
-            Dictionary<Int16, AudioDevice> outputDevices = new();
+            Dictionary<Int16, AudioDevice> inputDevices = new Dictionary<Int16, AudioDevice>();
+            Dictionary<Int16, AudioDevice> outputDevices = new Dictionary<Int16, AudioDevice>();
 
             var enumerator = new MMDeviceEnumerator();
 
