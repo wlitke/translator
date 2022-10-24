@@ -121,7 +121,22 @@ namespace translator
 
             recognizer.Canceled += (s, e) =>
             {
-                Console.WriteLine($"\nRecognition canceled. Reason: {e.Reason}; ErrorDetails: {e.ErrorDetails}");
+                if (e.Reason == CancellationReason.Error && e.ErrorDetails.StartsWith("WebSocket upgrade failed: Authentication error (401)."))
+                {
+                    Console.WriteLine($"\nAuthentication error: The configured subscription key might be invalid. Check the .config file for the right value.");
+                }
+                else if (e.Reason == CancellationReason.Error && e.ErrorDetails.StartsWith("Connection failed (no connection to the remote host)."))
+                {
+                    Console.WriteLine($"\nConnection error: The configured region might be invalid. Check the .config file for the right value.");
+                }
+                else if(e.Reason == CancellationReason.Error && e.ErrorDetails.StartsWith("Connection was closed by the remote host. Error code: 1007."))
+                {
+                    Console.WriteLine($"\nConnection error: The configured language might be invalid. Check the .config file for the right value.");
+                }
+                else
+                {
+                    Console.WriteLine($"\nRecognition canceled. Reason: {e.Reason}; ErrorDetails: {e.ErrorDetails}");
+                }
             };
 
             recognizer.SessionStarted += (s, e) =>
