@@ -256,7 +256,7 @@ namespace translator
             }
         }
 
-        private static void timerCallback(object o)
+        private static void TimerCallback(object o)
         {
             Environment.Exit(0);
         }
@@ -265,7 +265,7 @@ namespace translator
         {
             int seconds = 60 * 60;
             int systemTime = 1000 * seconds; // in milliseconds
-            Timer timer = new Timer(timerCallback, null, systemTime, systemTime);
+            Timer timer = new Timer(TimerCallback, null, systemTime, systemTime);
             
             HandleSoundDeviceSelection();
             await TranslationContinuousRecognitionAsync();
