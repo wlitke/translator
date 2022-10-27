@@ -192,32 +192,14 @@ namespace translator
             output
         }
 
-        private static void HandleSoundDeviceSelection()
+        private static void HandleAudioDeviceSelection(DeviceType deviceType)
         {
-            Dictionary<Int16, AudioDevice> outputDevices = new Dictionary<Int16, AudioDevice>();
+            Dictionary<Int16, AudioDevice> devices = new Dictionary<Int16, AudioDevice>();
             var enumerator = new MMDeviceEnumerator();
 
-            Console.WriteLine("Plese select a device for output.\n");
-            PrintDevices(outputDevices, enumerator, DeviceType.output);
-
-            HandleDeviceKeySelection(outputDevices, DeviceType.output);
-            Console.WriteLine();
-        }
-
-        private static void HandleSoundDevicesSelection()
-        {
-            Dictionary<Int16, AudioDevice> inputDevices = new Dictionary<Int16, AudioDevice>();
-            Dictionary<Int16, AudioDevice> outputDevices = new Dictionary<Int16, AudioDevice>();
-
-            var enumerator = new MMDeviceEnumerator();
-
-            Console.WriteLine("Plese select a device for in- and output.\n");
-            PrintDevices(inputDevices, enumerator, DeviceType.input);
-            PrintDevices(outputDevices, enumerator, DeviceType.output);
-
-            Console.WriteLine();
-            HandleDeviceKeySelection(inputDevices, DeviceType.input);
-            HandleDeviceKeySelection(outputDevices, DeviceType.output);
+            PrintDevices(devices, enumerator, deviceType);
+            HandleDeviceKeySelection(devices, deviceType);            
+            
             Console.WriteLine();
         }
 
@@ -281,22 +263,16 @@ namespace translator
             int runtime = 1000 * seconds; // in milliseconds
             Timer timer = new Timer(TimerCallback, null, runtime, runtime);
 
-            if (args.Length > 0)
+            if (args.Length > 0 && File.Exists(args[0]) && args[0].ToLower().EndsWith(".wav"))
             {
-                if (File.Exists(args[0]) && args[0].ToLower().EndsWith(".wav"))
-                {
-                    waveFile = args[0];
-                }
-            }
-            
-            if (string.IsNullOrEmpty(waveFile))
-            {
-                HandleSoundDevicesSelection();
+                waveFile = args[0];
+                HandleAudioDeviceSelection(DeviceType.output);
             }
             else
             {
-                HandleSoundDeviceSelection();
-            }
+                HandleAudioDeviceSelection(DeviceType.input);
+                HandleAudioDeviceSelection(DeviceType.output);
+            }            
             await TranslationContinuousRecognitionAsync();
         }
     }
