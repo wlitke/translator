@@ -13,12 +13,14 @@ using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Translation;
 using NAudio.CoreAudioApi;
 using System.Threading;
+using System.IO;
 
 namespace translator
 {
     class Program
     {
         static AudioDevice inputDevice, outputDevice;
+        static string waveFile;
 
         public static async Task TranslationContinuousRecognitionAsync()
         {
@@ -26,7 +28,7 @@ namespace translator
             ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice);
 
             SpeechTranslationConfig translationCfg = SetTranslationConfig(subscriptionKey, region, fromLanguage, targetLanguage, targetVoice);
-            AudioConfig audioCfgIn = inputDevice == null ? AudioConfig.FromDefaultMicrophoneInput() : AudioConfig.FromMicrophoneInput(inputDevice.ID);
+            AudioConfig audioCfgIn = inputDevice == null ? (string.IsNullOrEmpty(waveFile) ? AudioConfig.FromDefaultMicrophoneInput() : AudioConfig.FromWavFileInput(waveFile)) : AudioConfig.FromMicrophoneInput(inputDevice.ID);
             AudioConfig audioCfgOut = outputDevice == null ? AudioConfig.FromDefaultSpeakerOutput() : AudioConfig.FromSpeakerOutput(outputDevice.ID);
 
             // Creates a translation recognizer using microphone as audio input.
@@ -36,7 +38,7 @@ namespace translator
                 SubscribeToEvents(recognizer, fromLanguage, textQueue);
 
                 // Starts continuous recognition. Uses StopContinuousRecognitionAsync() to stop recognition.
-                Console.WriteLine("Say something ...");
+                Console.WriteLine(string.IsNullOrEmpty(waveFile) ? "Say something ..." : "Recognizing ...");
                 await recognizer.StartContinuousRecognitionAsync();
 
                 while (true)
@@ -192,6 +194,18 @@ namespace translator
 
         private static void HandleSoundDeviceSelection()
         {
+            Dictionary<Int16, AudioDevice> outputDevices = new Dictionary<Int16, AudioDevice>();
+            var enumerator = new MMDeviceEnumerator();
+
+            Console.WriteLine("Plese select a device for output.\n");
+            PrintDevices(outputDevices, enumerator, DeviceType.output);
+
+            HandleDeviceKeySelection(outputDevices, DeviceType.output);
+            Console.WriteLine();
+        }
+
+        private static void HandleSoundDevicesSelection()
+        {
             Dictionary<Int16, AudioDevice> inputDevices = new Dictionary<Int16, AudioDevice>();
             Dictionary<Int16, AudioDevice> outputDevices = new Dictionary<Int16, AudioDevice>();
 
@@ -264,10 +278,25 @@ namespace translator
         static async Task Main(string[] args)
         {
             int seconds = 60 * 60;
-            int systemTime = 1000 * seconds; // in milliseconds
-            Timer timer = new Timer(TimerCallback, null, systemTime, systemTime);
+            int runtime = 1000 * seconds; // in milliseconds
+            Timer timer = new Timer(TimerCallback, null, runtime, runtime);
+
+            if (args.Length > 0)
+            {
+                if (File.Exists(args[0]) && args[0].ToLower().EndsWith(".wav"))
+                {
+                    waveFile = args[0];
+                }
+            }
             
-            HandleSoundDeviceSelection();
+            if (string.IsNullOrEmpty(waveFile))
+            {
+                HandleSoundDevicesSelection();
+            }
+            else
+            {
+                HandleSoundDeviceSelection();
+            }
             await TranslationContinuousRecognitionAsync();
         }
     }
