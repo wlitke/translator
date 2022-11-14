@@ -30,7 +30,7 @@ See the [accompanying article](https://docs.microsoft.com/azure/cognitive-servic
 
 ## Run the project
 
-To debug the app and then run it, press F5 or use **Debug** \> **Start Debugging**. To run the app without debugging, press Ctrl+F5 or use **Debug** \> **Start Without Debugging**.
+To debug the app and then run it, press F5 or use **Debug** \> **Start Debugging**. To run the app without debugging, press Ctrl+F5 or use **Debug** \> **Start Without Debugging**. In general, the user can select both, the audio input device and audio output device that should be used for in- and output of translation. To use a wave file as audio input for translation the user can specify a path to the wave file as command line argument, e.g., `translator.exe "C:\...\file.wav"`. 
 
 ## References
 
