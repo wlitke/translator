@@ -1,82 +1,64 @@
-//
-// Copyright (c) Microsoft. All rights reserved.
-// Licensed under the MIT license. See LICENSE.md file in the project root for full license information.
-//
-
-// <code>
+using DeepL;
+using DeepL.Model;
+using Microsoft.CognitiveServices.Speech;
+using Microsoft.CognitiveServices.Speech.Audio;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
+using Newtonsoft.Json;
+using Speechmatics.Realtime.Client;
+using Speechmatics.Realtime.Client.Config;
+using Speechmatics.Realtime.Client.Enumerations;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
-using System.Threading.Tasks;
-using Microsoft.CognitiveServices.Speech;
-using Microsoft.CognitiveServices.Speech.Audio;
-using Microsoft.CognitiveServices.Speech.Translation;
-using NAudio.CoreAudioApi;
-using System.Threading;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace translator
 {
     class Program
     {
-        static AudioDevice inputDevice, outputDevice;
-        static string waveFile;
+        private static AudioDevice inputDevice, outputDevice;
+        private static BlockingStream AudioStream;
+        private static bool IsStereo;
 
-        public static async Task TranslationContinuousRecognitionAsync()
-        {
-            string subscriptionKey, region, fromLanguage, targetLanguage, targetVoice;
-            ReadConfiguration(out subscriptionKey, out region, out fromLanguage, out targetLanguage, out targetVoice);
-
-            SpeechTranslationConfig translationCfg = SetTranslationConfig(subscriptionKey, region, fromLanguage, targetLanguage, targetVoice);
-            AudioConfig audioCfgIn = inputDevice == null ? (string.IsNullOrEmpty(waveFile) ? AudioConfig.FromDefaultMicrophoneInput() : AudioConfig.FromWavFileInput(waveFile)) : AudioConfig.FromMicrophoneInput(inputDevice.ID);
-            AudioConfig audioCfgOut = outputDevice == null ? AudioConfig.FromDefaultSpeakerOutput() : AudioConfig.FromSpeakerOutput(outputDevice.ID);
-
-            // Creates a translation recognizer using microphone as audio input.
-            using (var recognizer = new TranslationRecognizer(translationCfg, audioCfgIn))
-            {
-                Queue<string> textQueue = new Queue<string>();
-                SubscribeToEvents(recognizer, fromLanguage, textQueue);
-
-                // Starts continuous recognition. Uses StopContinuousRecognitionAsync() to stop recognition.
-                Console.WriteLine(string.IsNullOrEmpty(waveFile) ? "Say something ..." : "Recognizing ...");
-                await recognizer.StartContinuousRecognitionAsync();
-
-                while (true)
-                {
-                    await SynthesizeText(translationCfg, audioCfgOut, textQueue);
-                }
-                // Never reached
-                // Stops continuous recognition.
-                /* await recognizer.StopContinuousRecognitionAsync();*/
-            }
-        }
-
-        private static async Task SynthesizeText(SpeechTranslationConfig translationCfg, AudioConfig audioCfgOut, Queue<string> textQueue)
+        private static async Task TranslateAndSynthesizeText(string DeepLAuthKey, string fromLanguage, string targetLangauge, SpeechConfig speechConfig, AudioConfig audioCfgOut, Queue<string> textQueue)
         {
             if (textQueue.Count > 0)
             {
                 string text = textQueue.Dequeue();
-                using (var synthesizer = new SpeechSynthesizer(translationCfg, audioCfgOut))
+                if (text.Length > 0)
                 {
-                    using (var result = await synthesizer.SpeakTextAsync(text))
+                    Console.WriteLine($"Recognized text: {text}");
+                    TextResult translatedText = await Translate(DeepLAuthKey, text, fromLanguage, targetLangauge);
+                    using (var synthesizer = new SpeechSynthesizer(speechConfig, audioCfgOut))
                     {
-                        if (result.Reason == ResultReason.SynthesizingAudioCompleted)
+                        using (var result = await synthesizer.SpeakTextAsync(translatedText.ToString()))
                         {
-                            Console.WriteLine($"Speech synthesized to speaker for text [{text}]");
+                            if (result.Reason == ResultReason.SynthesizingAudioCompleted)
+                            {
+                                Console.WriteLine($"Speech synthesized: {translatedText}");
+                            }
                         }
                     }
                 }
             }
         }
 
-        private static SpeechTranslationConfig SetTranslationConfig(string subscriptionKey, string region, string fromLanguage, string targetLanguage, string targetVoice)
+        private static async Task<TextResult> Translate(string DeepLAuthKey, string text, string fromLanguage, string targetLangauge)
         {
-            // Creates an instance of a speech translation config with specified subscription key and service region.
-            // Replace with your own subscription key and service region (e.g., "westus").
-            var translationCfg = SpeechTranslationConfig.FromSubscription(subscriptionKey, region);
-            translationCfg.SpeechRecognitionLanguage = fromLanguage;
-            translationCfg.AddTargetLanguage(targetLanguage);
-            translationCfg.SpeechSynthesisVoiceName = targetVoice;
+            var translator = new Translator(DeepLAuthKey);
+            var translatedText = await translator.TranslateTextAsync(
+                  text,
+                  fromLanguage,
+                  targetLangauge);
+            return translatedText;
+        }
+
+        private static SpeechConfig SetSpeechConfig(string subscriptionKey, string region, string targetVoice)
+        {
+            var speechConfig = SpeechConfig.FromSubscription(subscriptionKey, region);
+            speechConfig.SpeechSynthesisVoiceName = targetVoice;
 
             // Support characters for, e.g., uk-UA
             if (Environment.OSVersion.Platform == PlatformID.Win32NT)
@@ -84,82 +66,20 @@ namespace translator
                 Console.InputEncoding = System.Text.Encoding.Unicode;
                 Console.OutputEncoding = System.Text.Encoding.Unicode;
             }
-
-            return translationCfg;
+            return speechConfig;
         }
 
-        private static void SubscribeToEvents(TranslationRecognizer recognizer, string fromLanguage, Queue<string> textQueue)
+        private static void ReadConfiguration(out string SpeechmaticsAuthKey, out string SpeechmaticsRtUrl, out string SpeechmaticsLanguage, out string DeepLAuthKey, out string DeepLFromLanguage, out string DeepLTargetLanguage, out string AzureAuthKey, out string AzureRegion, out string AzureTargetVoice)
         {
-            // Skip handling the recognizing event
-            /* recognizer.Recognizing += (s, e) =>
-            {
-                Console.WriteLine($"RECOGNIZING in '{fromLanguage}': Text={e.Result.Text}");
-                foreach (var element in e.Result.Translations)
-                {
-                    Console.WriteLine($"    TRANSLATING into '{element.Key}': {element.Value}");
-                }
-            };*/
-
-            recognizer.Recognized += (s, e) =>
-            {
-                if (e.Result.Reason == ResultReason.TranslatedSpeech)
-                {
-                    Console.WriteLine($"\nFinal result: Reason: {e.Result.Reason.ToString()}, recognized text in {fromLanguage}: {e.Result.Text}");
-                    foreach (var element in e.Result.Translations)
-                    {
-                        Console.WriteLine($"    TRANSLATED into '{element.Key}': {element.Value}");
-                        textQueue.Enqueue(element.Value);
-                    }
-                }
-            };
-
-            // Skip handling the synthesizing event
-            /* recognizer.Synthesizing += (s, e) =>
-            {
-                var audio = e.Result.GetAudio();
-                Console.WriteLine(audio.Length != 0
-                    ? $"AudioSize: {audio.Length}"
-                    : $"AudioSize: {audio.Length} (end of synthesis data)");
-            };*/
-
-            recognizer.Canceled += (s, e) =>
-            {
-                if (e.Reason == CancellationReason.Error && e.ErrorDetails.StartsWith("WebSocket upgrade failed: Authentication error (401)."))
-                {
-                    Console.WriteLine($"\nAuthentication error: The configured subscription key might be invalid. Check the .config file for the right value.");
-                }
-                else if (e.Reason == CancellationReason.Error && e.ErrorDetails.StartsWith("Connection failed (no connection to the remote host)."))
-                {
-                    Console.WriteLine($"\nConnection error: The configured region might be invalid. Check the .config file for the right value.");
-                }
-                else if(e.Reason == CancellationReason.Error && e.ErrorDetails.StartsWith("Connection was closed by the remote host. Error code: 1007."))
-                {
-                    Console.WriteLine($"\nConnection error: The configured language might be invalid. Check the .config file for the right value.");
-                }
-                else
-                {
-                    Console.WriteLine($"\nRecognition canceled. Reason: {e.Reason}; ErrorDetails: {e.ErrorDetails}");
-                }
-            };
-
-            recognizer.SessionStarted += (s, e) =>
-            {
-                // Console.WriteLine("\nSession started event.");
-            };
-
-            recognizer.SessionStopped += (s, e) =>
-            {
-                Console.WriteLine("\nSession stopped event.");
-            };
-        }
-
-        private static void ReadConfiguration(out string subscriptionKey, out string region, out string fromLanguage, out string targetLanguage, out string targetVoice)
-        {
-            subscriptionKey = ReadSetting("SubscriptionKey");
-            region = ReadSetting("Region");
-            fromLanguage = ReadSetting("FromLanguage");
-            targetLanguage = ReadSetting("TargetLanguage");
-            targetVoice = ReadSetting("TargetVoice");
+            SpeechmaticsAuthKey = ReadSetting("SpeechmaticsAuthKey");
+            SpeechmaticsRtUrl = ReadSetting("SpeechmaticsRtUrl");
+            SpeechmaticsLanguage = ReadSetting("SpeechmaticsLanguage");
+            DeepLAuthKey = ReadSetting("DeepLAuthKey");
+            DeepLFromLanguage = ReadSetting("DeepLFromLanguage");
+            DeepLTargetLanguage = ReadSetting("DeepLTargetLanguage");
+            AzureAuthKey = ReadSetting("AzureAuthKey");
+            AzureRegion = ReadSetting("AzureRegion");
+            AzureTargetVoice = ReadSetting("AzureTargetVoice");
         }
 
         static string ReadSetting(string key)
@@ -177,13 +97,15 @@ namespace translator
 
         class AudioDevice
         {
-            public AudioDevice(string name, string id)
+            public AudioDevice(string name, string id, MMDevice mmDevice)
             {
                 Name = name;
                 ID = id;
+                MMDevice = mmDevice;
             }
             public string Name { get; set; }
             public string ID { get; set; }
+            public MMDevice MMDevice { get; set; }
         }
 
         enum DeviceType
@@ -198,8 +120,8 @@ namespace translator
             var enumerator = new MMDeviceEnumerator();
 
             PrintDevices(devices, enumerator, deviceType);
-            HandleDeviceKeySelection(devices, deviceType);            
-            
+            HandleDeviceKeySelection(devices, deviceType);
+
             Console.WriteLine();
         }
 
@@ -213,11 +135,11 @@ namespace translator
             else if (deviceType == DeviceType.output)
                 flow = DataFlow.Render;
             else { }
-            
+
             Int16 i = 1;
             foreach (var endpoint in enumerator.EnumerateAudioEndPoints(flow, DeviceState.Active))
             {
-                devices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID));
+                devices.Add(i, new AudioDevice(endpoint.FriendlyName, endpoint.ID, endpoint));
                 Console.WriteLine("({0})\t{1}", i, endpoint.FriendlyName);
                 i++;
             }
@@ -225,7 +147,7 @@ namespace translator
 
         private static void HandleDeviceKeySelection(Dictionary<Int16, AudioDevice> devices, DeviceType deviceType)
         {
-            if (devices.Count > 0) 
+            if (devices.Count > 0)
             {
                 Int16 deviceKey = 0;
                 while (deviceKey < 1 || deviceKey > devices.Count)
@@ -245,7 +167,8 @@ namespace translator
                         Console.WriteLine("The entered value is invalid. Please enter an existing number.");
                     }
                 }
-            } else
+            }
+            else
             {
                 Console.WriteLine("There is no {0} device. Please install an {0} device.", deviceType);
                 // Environment.Exit(0);
@@ -259,22 +182,192 @@ namespace translator
 
         static async Task Main(string[] args)
         {
-            int seconds = 60 * 60;
-            int runtime = 1000 * seconds; // in milliseconds
-            Timer timer = new Timer(TimerCallback, null, runtime, runtime);
+            //int seconds = 60 * 60;
+            //int systemTime = 1000 * seconds; // in milliseconds
+            //Timer timer = new Timer(TimerCallback, null, systemTime, systemTime);
 
-            if (args.Length > 0 && File.Exists(args[0]) && args[0].ToLower().EndsWith(".wav"))
+            if (args.Length > 0 && File.Exists(args[0]) && args[0].ToLower().EndsWith(".mp3"))
             {
-                waveFile = args[0];
                 HandleAudioDeviceSelection(DeviceType.output);
+                await SpeechFromFileToSpeech(args[0]);
             }
             else
             {
                 HandleAudioDeviceSelection(DeviceType.input);
                 HandleAudioDeviceSelection(DeviceType.output);
-            }            
-            await TranslationContinuousRecognitionAsync();
+                await SpeechFromRecordingToSpeech();
+            }
+        }
+
+        /// <summary>
+        /// Transcribe speech from file into text, translate the text, and convert the translated text to speech.
+        /// </summary>
+        /// <param name="mp3File">The path to the mp3 file</param>
+        /// <returns></returns>
+        private static async Task SpeechFromFileToSpeech(string mp3File)
+        {
+            using (var stream = File.Open(mp3File, FileMode.Open, FileAccess.Read))
+            {
+                try
+                {
+                    string SpeechmaticsAuthKey, SpeechmaticsRtUrl, SpeechmaticsLanguage, DeepLAuthKey, DeepLFromLanguage, DeepLTargetLanguage, AzureAuthKey, AzureRegion, AzureTargetVoice;
+                    ReadConfiguration(out SpeechmaticsAuthKey, out SpeechmaticsRtUrl, out SpeechmaticsLanguage, out DeepLAuthKey, out DeepLFromLanguage, out DeepLTargetLanguage, out AzureAuthKey, out AzureRegion, out AzureTargetVoice);
+
+                    Queue<string> textQueue = new Queue<string>();
+                    var config = new SmRtApiConfig(SpeechmaticsLanguage)
+                    {
+                        AddTranscriptCallback = s => textQueue.Enqueue(s),
+                        // AddPartialTranscriptMessageCallback = s => Console.Write("* " + s.transcript),
+                        ErrorMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        WarningMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        Insecure = true,
+                        AuthToken = SpeechmaticsAuthKey
+                    };
+
+                    var api = new SmRtApi(SpeechmaticsRtUrl,
+                        stream,
+                        config
+                    );
+
+                    await TranscribeTranslateSpeech(api, SpeechmaticsRtUrl, DeepLAuthKey, DeepLFromLanguage, DeepLTargetLanguage, AzureAuthKey, AzureRegion, AzureTargetVoice, textQueue, false);
+                }
+                catch (AggregateException e)
+                {
+                    Console.WriteLine(e);
+                }
+            }
+            Console.WriteLine("End of stream");
+            Console.ReadLine();
+        }
+
+        /// <summary>
+        /// Transcribe speech from recording into text, translate the text, and convert the translated text to speech.
+        /// </summary>
+        /// <returns></returns>
+        private static async Task SpeechFromRecordingToSpeech()
+        {
+            var wasapiClient = new WasapiCapture(inputDevice.MMDevice);
+            var sampleRate = wasapiClient.WaveFormat.SampleRate;
+            var channels = wasapiClient.WaveFormat.Channels;
+
+            IsStereo = channels == 2;
+
+            //Console.WriteLine("Sample rate {0}", sampleRate);
+            //Console.WriteLine("Bits per sample {0}", wasapiClient.WaveFormat.BitsPerSample);
+            //Console.WriteLine("Channels {0}", channels);
+            //Console.WriteLine("Encoding {0}", wasapiClient.WaveFormat.Encoding);
+            wasapiClient.DataAvailable += WaveSourceOnDataAvailable;
+
+            var recorderTask = new Task(() =>
+            {
+                wasapiClient.StartRecording();
+            });
+            AudioStream = new BlockingStream(1024 * 1024);
+
+            using (var stream = AudioStream)
+            {
+                try
+                {
+                    string SpeechmaticsAuthKey, SpeechmaticsRtUrl, SpeechmaticsLanguage, DeepLAuthKey, DeepLFromLanguage, DeepLTargetLanguage, AzureAuthKey, AzureRegion, AzureTargetVoice;
+                    ReadConfiguration(out SpeechmaticsAuthKey, out SpeechmaticsRtUrl, out SpeechmaticsLanguage, out DeepLAuthKey, out DeepLFromLanguage, out DeepLTargetLanguage, out AzureAuthKey, out AzureRegion, out AzureTargetVoice);
+
+                    Queue<string> textQueue = new Queue<string>();
+                    var config = new SmRtApiConfig(SpeechmaticsLanguage, sampleRate, AudioFormatType.Raw, AudioFormatEncoding.PcmF32Le)
+                    {
+                        AddTranscriptCallback = s => textQueue.Enqueue(s),
+                        // AddPartialTranscriptMessageCallback = s => Console.Write("* " + s.transcript),
+                        ErrorMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        WarningMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        Insecure = true,
+                        BlockSize = 8192,
+                        AuthToken = SpeechmaticsAuthKey
+                    };
+
+                    var api = new SmRtApi(SpeechmaticsRtUrl,
+                        stream,
+                        config
+                    );
+
+                    // Start recording audio
+                    recorderTask.Start();
+
+                    await TranscribeTranslateSpeech(api, SpeechmaticsRtUrl, DeepLAuthKey, DeepLFromLanguage, DeepLTargetLanguage, AzureAuthKey, AzureRegion, AzureTargetVoice, textQueue, true);
+                }
+                catch (AggregateException e)
+                {
+                    Console.WriteLine(e);
+                }
+            }
+            Console.WriteLine("End of stream");
+            Console.ReadLine();
+        }
+
+        private static async Task TranscribeTranslateSpeech(SmRtApi api, string SpeechmaticsRtUrl, string DeepLAuthKey, string DeepLFromLanguage, string DeepLTargetLanguage, string AzureAuthKey, string AzureRegion, string AzureTargetVoice, Queue<string> textQueue, bool recording)
+        {
+            Console.WriteLine($"Connecting to {SpeechmaticsRtUrl}");
+            // Start Speechmatics API task for transcription
+            var apiTask = new Task(() =>
+            {
+                api.Run();
+            });
+            apiTask.Start();
+            if (recording) Console.WriteLine("Say something ...");
+
+            SpeechConfig speechConfig = SetSpeechConfig(AzureAuthKey, AzureRegion, AzureTargetVoice);
+            AudioConfig audioCfgOut = outputDevice == null ? AudioConfig.FromDefaultSpeakerOutput() : AudioConfig.FromSpeakerOutput(outputDevice.ID);
+            while (true)
+            {
+                await TranslateAndSynthesizeText(DeepLAuthKey, DeepLFromLanguage, DeepLTargetLanguage, speechConfig, audioCfgOut, textQueue);
+            }
+        }
+
+        private static string ToJson(object obj)
+        {
+            return JsonConvert.SerializeObject(obj);
+        }
+
+        /// <summary>
+        /// We want to turn the 2 streams into 1.
+        /// </summary>
+        /// <param name="waveInEventArgs"></param>
+        /// <returns></returns>
+        private static byte[] SquashStereo(WaveInEventArgs waveInEventArgs)
+        {
+            var data = waveInEventArgs.Buffer;
+            // TODO: do not allocate a block every time this is called
+            var audioBytes = new byte[waveInEventArgs.BytesRecorded / 2];
+            // offset into the receiving buffer
+            var offset = 0;
+
+            for (var i = 0; i < waveInEventArgs.BytesRecorded; i += 8)
+            {
+                var s = BitConverter.ToSingle(data, i) / 2.0f + BitConverter.ToSingle(data, i + 4) / 2.0f;
+                Buffer.BlockCopy(BitConverter.GetBytes(s), 0, audioBytes, offset, 4);
+                offset += 4;
+            }
+
+            return audioBytes;
+        }
+        private static void WaveSourceOnDataAvailable(object sender, WaveInEventArgs waveInEventArgs)
+        {
+
+            // Use this code to save the audio to a .raw file to examine in Audacity
+            //
+            //using (var f = File.OpenWrite("./audio.raw"))
+            //{
+            //    f.Seek(0, SeekOrigin.End);
+            //    f.Write(waveInEventArgs.Buffer, 0, waveInEventArgs.BytesRecorded);
+            //    //f.Write(squashed, 0, squashed.Length);
+            //}
+            if (IsStereo)
+            {
+                var squashed = SquashStereo(waveInEventArgs);
+                AudioStream.Write(squashed, 0, squashed.Length);
+            }
+            else
+            {
+                AudioStream.Write(waveInEventArgs.Buffer, 0, waveInEventArgs.BytesRecorded);
+            }
         }
     }
 }
-// </code>
