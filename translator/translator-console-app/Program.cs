@@ -12,6 +12,8 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace translator
@@ -21,38 +23,43 @@ namespace translator
         private static AudioDevice inputDevice, outputDevice;
         private static BlockingStream AudioStream;
         private static bool IsStereo;
+        private static StringBuilder recognizer, translator;
 
-        private static async Task TranslateAndSynthesizeText(string DeepLAuthKey, string fromLanguage, string targetLangauge, SpeechConfig speechConfig, AudioConfig audioCfgOut, Queue<string> textQueue)
+        [DllImport("Kernel32")]
+        private static extern bool SetConsoleCtrlHandler(SetConsoleCtrlEventHandler handler, bool add);
+
+        private delegate bool SetConsoleCtrlEventHandler(CtrlType sig);
+        private enum CtrlType
         {
-            if (textQueue.Count > 0)
-            {
-                string text = textQueue.Dequeue();
-                if (text.Length > 0)
-                {
-                    Console.WriteLine($"Recognized text: {text}");
-                    TextResult translatedText = await Translate(DeepLAuthKey, text, fromLanguage, targetLangauge);
-                    using (var synthesizer = new SpeechSynthesizer(speechConfig, audioCfgOut))
-                    {
-                        using (var result = await synthesizer.SpeakTextAsync(translatedText.ToString()))
-                        {
-                            if (result.Reason == ResultReason.SynthesizingAudioCompleted)
-                            {
-                                Console.WriteLine($"Speech synthesized: {translatedText}");
-                            }
-                        }
-                    }
-                }
-            }
+            CTRL_C_EVENT = 0,
+            CTRL_BREAK_EVENT = 1,
+            CTRL_CLOSE_EVENT = 2,
+            CTRL_LOGOFF_EVENT = 5,
+            CTRL_SHUTDOWN_EVENT = 6
         }
 
-        private static async Task<TextResult> Translate(string DeepLAuthKey, string text, string fromLanguage, string targetLangauge)
+        private enum DeviceType
         {
-            var translator = new Translator(DeepLAuthKey);
-            var translatedText = await translator.TranslateTextAsync(
-                  text,
-                  fromLanguage,
-                  targetLangauge);
-            return translatedText;
+            input,
+            output
+        }
+
+        private static bool Handler(CtrlType signal)
+        {
+            switch (signal)
+            {
+                case CtrlType.CTRL_BREAK_EVENT:
+                case CtrlType.CTRL_C_EVENT:
+                case CtrlType.CTRL_LOGOFF_EVENT:
+                case CtrlType.CTRL_SHUTDOWN_EVENT:
+                case CtrlType.CTRL_CLOSE_EVENT:
+                    WriteStringBuildersToFiles();
+                    Environment.Exit(0);
+                    return false;
+
+                default:
+                    return false;
+            }
         }
 
         private static SpeechConfig SetSpeechConfig(string subscriptionKey, string region, string targetVoice)
@@ -82,7 +89,7 @@ namespace translator
             AzureTargetVoice = ReadSetting("AzureTargetVoice");
         }
 
-        static string ReadSetting(string key)
+        private static string ReadSetting(string key)
         {
             try
             {
@@ -95,7 +102,7 @@ namespace translator
             }
         }
 
-        class AudioDevice
+        private class AudioDevice
         {
             public AudioDevice(string name, string id, MMDevice mmDevice)
             {
@@ -106,12 +113,6 @@ namespace translator
             public string Name { get; set; }
             public string ID { get; set; }
             public MMDevice MMDevice { get; set; }
-        }
-
-        enum DeviceType
-        {
-            input,
-            output
         }
 
         private static void HandleAudioDeviceSelection(DeviceType deviceType)
@@ -186,6 +187,10 @@ namespace translator
             //int systemTime = 1000 * seconds; // in milliseconds
             //Timer timer = new Timer(TimerCallback, null, systemTime, systemTime);
 
+            SetConsoleCtrlHandler(Handler, true);
+            recognizer = new StringBuilder();
+            translator = new StringBuilder();
+
             if (args.Length > 0 && File.Exists(args[0]) && args[0].ToLower().EndsWith(".mp3"))
             {
                 HandleAudioDeviceSelection(DeviceType.output);
@@ -197,6 +202,55 @@ namespace translator
                 HandleAudioDeviceSelection(DeviceType.output);
                 await SpeechFromRecordingToSpeech();
             }
+        }
+
+        private static void WriteStringBuildersToFiles()
+        {
+            WriteStringBuilderToFile(DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + "_Recognized.txt", recognizer);
+            WriteStringBuilderToFile(DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + "_Translated.txt", translator);
+        }
+
+        private static void WriteStringBuilderToFile(string fileName, StringBuilder stringBuilder)
+        {
+            string docPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            File.WriteAllText(Path.Combine(docPath, fileName), stringBuilder.ToString());
+        }
+
+        private static async Task TranslateAndSynthesizeText(string DeepLAuthKey, string fromLanguage, string targetLangauge, SpeechConfig speechConfig, AudioConfig audioCfgOut, Queue<string> textQueue)
+        {
+            if (textQueue.Count > 0)
+            {
+                string text = textQueue.Dequeue();
+                if (text != null && text.Length > 0)
+                {
+                    Console.WriteLine($"Recognized text: {text}");
+                    recognizer.AppendLine(text);
+
+                    TextResult translatedText = await Translate(DeepLAuthKey, text, fromLanguage, targetLangauge);
+                    translator.AppendLine(translatedText.ToString());
+
+                    using (var synthesizer = new SpeechSynthesizer(speechConfig, audioCfgOut))
+                    {
+                        using (var result = await synthesizer.SpeakTextAsync(translatedText.ToString()))
+                        {
+                            if (result.Reason == ResultReason.SynthesizingAudioCompleted)
+                            {
+                                Console.WriteLine($"Speech synthesized: {translatedText}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static async Task<TextResult> Translate(string DeepLAuthKey, string text, string fromLanguage, string targetLangauge)
+        {
+            var translator = new Translator(DeepLAuthKey);
+            var translatedText = await translator.TranslateTextAsync(
+                  text,
+                  fromLanguage,
+                  targetLangauge);
+            return translatedText;
         }
 
         /// <summary>
@@ -217,11 +271,14 @@ namespace translator
                     var config = new SmRtApiConfig(SpeechmaticsLanguage)
                     {
                         AddTranscriptCallback = s => textQueue.Enqueue(s),
-                        // AddPartialTranscriptMessageCallback = s => Console.Write("* " + s.transcript),
+                        // AddPartialTranscriptMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        // AddPartialTranscriptCallback = s => Console.WriteLine(ToJson(s)),
                         ErrorMessageCallback = s => Console.WriteLine(ToJson(s)),
                         WarningMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        // EnablePartials = true,
+                        AuthToken = SpeechmaticsAuthKey,
                         Insecure = true,
-                        AuthToken = SpeechmaticsAuthKey
+                        OperatingPoint = "enhanced"
                     };
 
                     var api = new SmRtApi(SpeechmaticsRtUrl,
@@ -275,12 +332,15 @@ namespace translator
                     var config = new SmRtApiConfig(SpeechmaticsLanguage, sampleRate, AudioFormatType.Raw, AudioFormatEncoding.PcmF32Le)
                     {
                         AddTranscriptCallback = s => textQueue.Enqueue(s),
-                        // AddPartialTranscriptMessageCallback = s => Console.Write("* " + s.transcript),
+                        // AddPartialTranscriptMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        // AddPartialTranscriptCallback = s => Console.WriteLine(ToJson(s)),
                         ErrorMessageCallback = s => Console.WriteLine(ToJson(s)),
                         WarningMessageCallback = s => Console.WriteLine(ToJson(s)),
+                        // EnablePartials = true,
+                        AuthToken = SpeechmaticsAuthKey,
                         Insecure = true,
                         BlockSize = 8192,
-                        AuthToken = SpeechmaticsAuthKey
+                        OperatingPoint = "enhanced"
                     };
 
                     var api = new SmRtApi(SpeechmaticsRtUrl,
