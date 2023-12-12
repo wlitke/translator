@@ -1,7 +1,7 @@
 # Translate speech in C# for .NET Framework for Windows
 
 This project is a console application for translating speech with C# under the .NET Framework (version 4.8 or above) using the Speechmatics .NET client, DeepL .NET client, and Speech SDK for Windows.
-The Speechmatics API is used for speech-to-text transcribtion, the DeepL API is used for translation, and the Azure Speech API is used for text-to-speech.
+The Speechmatics API is used for speech-to-text transcription, the DeepL API is used for translation, and the Azure Speech API is used for text-to-speech.
 
 ## Prerequisites
 
